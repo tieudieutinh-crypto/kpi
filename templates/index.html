@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, plan_badge, rating_label with context %}
+{% block title %}Tổng quan · Chấm KPI cán bộ{% endblock %}
+{% block content %}
+<div class="dash-head">
+  <div>
+    <h1>Tổng quan</h1>
+    <p class="muted">
+      {% if d.period %}{{ d.period.name }} · {{ d.period.start_date.strftime('%d/%m/%Y') }} – {{ d.period.end_date.strftime('%d/%m/%Y') }}
+      {% if d.period.status != 'open' %}<span class="badge">Đã đóng</span>{% endif %}
+      {% else %}Chưa có kỳ đánh giá{% endif %}
+    </p>
+  </div>
+  {% if d.period %}
+  <div class="period-meter" title="Đã qua {{ d.period_progress }}% thời gian của kỳ">
+    <span class="muted">Thời gian kỳ đánh giá</span>
+    <div class="track"><div class="fill" style="width:{{ d.period_progress }}%"></div></div>
+    <b>{{ d.period_progress }}%</b>
+  </div>
+  {% endif %}
+</div>
+
+{# ---------- Cảnh báo / việc cần làm ---------- #}
+{% if d.pending_users %}
+<div class="flash warning">Có <b>{{ d.pending_users }}</b> tài khoản đang chờ duyệt.
+  <a href="{{ url_for('users.list_users', status='pending') }}">Xem danh sách</a></div>
+{% endif %}
+{% if d.my_queue %}
+<div class="flash warning">Có <b>{{ d.my_queue }}</b> hồ sơ KPI cá nhân (Mẫu 3, Mẫu 5) đang chờ bạn nhận xét hoặc phê duyệt.
+  <a href="{{ url_for('kpi.queue') }}">Xử lý ngay</a></div>
+{% endif %}
+{% if d.collective_to_confirm %}
+<div class="flash warning">Có <b>{{ d.collective_to_confirm }}</b> bảng KPI tập thể (Mẫu 1, Mẫu 2) đang chờ bạn duyệt.
+  <a href="{{ url_for('collective.index') }}">Xem</a></div>
+{% endif %}
+
+{% if not d.period %}
+  <div class="card"><p>Chưa có kỳ đánh giá đang mở.
+    {% if can('period.manage') %}Tạo tại <a href="{{ url_for('admin.periods') }}">Kỳ đánh giá</a>.{% endif %}</p></div>
+{% else %}
+
+{# ---------- Thẻ số liệu ---------- #}
+<div class="tiles">
+  {% if d.team_view %}
+  <div class="tile">
+    <span class="tile-label">Phòng, Ban</span>
+    <span class="tile-value">{{ d.dept_total }}</span>
+    <span class="tile-sub">{% if can('department.manage') %}<a href="{{ url_for('admin.departments') }}">Quản lý Phòng, Ban →</a>{% else %}trong phạm vi{% endif %}</span>
+  </div>
+  <div class="tile">
+    <span class="tile-label">Cán bộ, công chức</span>
+    <span class="tile-value">{{ d.team_total }}</span>
+    <span class="tile-sub">tài khoản đang hoạt động · Mẫu 3 đã duyệt {{ d.plan_done }}</span>
+  </div>
+  <div class="tile">
+    <span class="tile-label">Đã gửi hồ sơ</span>
+    <span class="tile-value">{{ d.team_submitted }}<small>/{{ d.team_total }}</small></span>
+    <div class="track sm"><div class="fill" style="width:{{ d.pct_submitted }}%"></div></div>
+    <span class="tile-sub">{{ d.pct_submitted }}% cán bộ</span>
+  </div>
+  <div class="tile">
+    <span class="tile-label">Đã duyệt hồ sơ</span>
+    <span class="tile-value">{{ d.team_done }}<small>/{{ d.team_submitted }}</small></span>
+    <div class="track sm"><div class="fill" style="width:{{ d.pct_done }}%"></div></div>
+    <span class="tile-sub">{{ d.pct_done }}% số hồ sơ đã gửi</span>
+  </div>
+  <div class="tile">
+    <span class="tile-label">Điểm trung bình</span>
+    <span class="tile-value">{{ '%.2f'|format(d.avg_score) if d.avg_score is not none else '—' }}<small>/100</small></span>
+    <span class="tile-sub">{{ d.rated_total }} hồ sơ đã gửi</span>
+  </div>
+  {% endif %}
+  {% if d.my_queue is defined %}
+  <a class="tile link-tile {% if d.my_queue %}attn{% endif %}" href="{{ url_for('kpi.queue') }}">
+    <span class="tile-label">Chờ tôi xử lý</span>
+    <span class="tile-value">{{ d.my_queue }}</span>
+    <span class="tile-sub">hồ sơ Mẫu 3, Mẫu 5 cần duyệt →</span>
+  </a>
+  {% endif %}
+  {% if d.my_eval is defined %}
+  <a class="tile link-tile" href="{{ url_for('kpi.view', eid=d.my_eval.id) if d.my_eval else url_for('kpi.mine') }}">
+    <span class="tile-label">Hồ sơ của tôi</span>
+    {% if d.my_eval %}
+      <span class="tile-value">{{ '%.2f'|format(d.my_eval.total_score) }}<small> điểm</small></span>
+      <span class="tile-sub">{% if not d.needs_submission %}<span class="badge">Không cần trình</span>
+        {% elif d.my_eval.plan_status != 'approved' %}{{ plan_badge(d.my_eval.plan_status) }}
+        {% else %}{{ status_badge(d.my_eval.status) }}{% endif %}
+        {% set r = d.my_eval.final_rating or d.my_eval.proposed_rating or d.my_eval.self_rating %}
+        {% if r %}<span class="badge info" title="{{ rating_label(r) }}">{{ r }}</span>{% endif %}</span>
+    {% else %}
+      <span class="tile-value">—</span>
+      <span class="tile-sub">Chưa lập hồ sơ, bấm để bắt đầu →</span>
+    {% endif %}
+  </a>
+  {% endif %}
+</div>
+
+<div class="dash-grid">
+  {# ---------- Tiến độ hồ sơ ---------- #}
+  {% if d.team_view %}
+  <section class="card">
+    <h2>Tiến độ hồ sơ KPI cá nhân</h2>
+    <div class="stack" role="img" aria-label="Phân bố hồ sơ theo bước xử lý">
+      {% for s in d.stages if s.count %}
+      <div class="seg st-{{ s.code }}" style="flex-grow:{{ s.count }}" title="{{ s.label }}: {{ s.count }} cán bộ ({{ s.pct }}%)"></div>
+      {% endfor %}
+    </div>
+    <ul class="legend-list">
+      {% for s in d.stages %}
+      <li><span class="key st-{{ s.code }}"></span>{{ s.label }}<b>{{ s.count }}</b><span class="muted">{{ s.pct }}%</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {# ---------- Hạn nộp ---------- #}
+  <section class="card">
+    <h2>Mốc thời gian</h2>
+    <ol class="timeline-steps">
+      {% for x in d.deadlines %}
+      <li class="{{ x.state }}">
+        <span class="dot"></span>
+        <div>
+          <b>{{ x.code }}</b> · {{ x.label }}
+          <div class="muted">{{ x.date.strftime('%d/%m/%Y') }} ·
+            {% if x.days < 0 %}đã qua {{ -x.days }} ngày
+            {% elif x.days == 0 %}<b class="due">hạn chót hôm nay</b>
+            {% else %}<span class="{{ 'due' if x.days <= 7 }}">còn {{ x.days }} ngày</span>{% endif %}
+          </div>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  {% if d.team_view %}
+  {# ---------- Xếp loại ---------- #}
+  <section class="card">
+    <h2>Phân bố xếp loại</h2>
+    <p class="muted small">Theo mức đã quyết định, nếu chưa có thì theo mức đề xuất ({{ d.rated_total }} hồ sơ đã gửi).</p>
+    {% for r in d.ratings %}
+    <div class="hbar" title="{{ r.label }}: {{ r.count }} ({{ r.pct }}%)">
+      <span class="hbar-label"><b>{{ r.code }}</b> <span class="muted">{{ r.label }}</span></span>
+      <div class="hbar-track"><div class="hbar-fill" style="width:{{ r.w }}%"></div></div>
+      <span class="hbar-val">{{ r.count }}</span>
+    </div>
+    {% endfor %}
+    <div class="quota">
+      Tỷ lệ HTXS / HTT:
+      {% if d.htxs_ratio is none %}<b>—</b> <span class="muted">(chưa có HTT)</span>
+      {% else %}<b>{{ d.htxs_ratio }}%</b> ({{ d.htxs }}/{{ d.htt }})
+        {% if d.htxs_ratio > 20 %}<span class="badge bad">⚠ Vượt hạn mức 20%</span>
+        {% else %}<span class="badge ok">✓ Trong hạn mức 20%</span>{% endif %}
+      {% endif %}
+    </div>
+  </section>
+
+  {# ---------- Phân bố điểm ---------- #}
+  <section class="card">
+    <h2>Phân bố tổng điểm</h2>
+    <p class="muted small">Số cán bộ theo khoảng điểm (thang 100).</p>
+    <div class="columns" role="img" aria-label="Số cán bộ theo khoảng điểm">
+      {% for b in d.score_bins %}
+      <div class="col" title="{{ b.label }} điểm: {{ b.count }} cán bộ">
+        <div class="col-plot">
+          <span class="col-val">{{ b.count if b.count else '' }}</span>
+          <div class="col-bar" style="height:{{ b.h if b.count else 0 }}%"></div>
+        </div>
+        <span class="col-label">{{ b.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ---------- KPI tập thể: Mẫu 1 và Mẫu 2 riêng ---------- #}
+  {% if d.collective %}
+  <section class="card">
+    <h2>KPI tập thể ({{ d.collective_total }} Phòng, Ban)</h2>
+    {% for title, series in (('Mẫu 1 · Danh mục chỉ tiêu', d.collective), ('Mẫu 2 · Kết quả thực hiện', d.collective_m2)) %}
+    <h3 class="sub">{{ title }}</h3>
+    <div class="stack" role="img" aria-label="Tình trạng {{ title }}">
+      {% for s in series if s.count %}
+      <div class="seg ct-{{ s.code }}" style="flex-grow:{{ s.count }}" title="{{ s.label }}: {{ s.count }} Phòng, Ban"></div>
+      {% endfor %}
+    </div>
+    <ul class="legend-list">
+      {% for s in series %}
+      <li><span class="key ct-{{ s.code }}"></span>{{ s.label }}<b>{{ s.count }}</b><span class="muted">{{ s.pct }}%</span></li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+    <a class="btn secondary small" href="{{ url_for('collective.index') }}">Mở KPI tập thể</a>
+  </section>
+  {% endif %}
+
+  {# ---------- Hoạt động gần đây ---------- #}
+  {% if d.team_view %}
+  <section class="card">
+    <h2>Hoạt động gần đây</h2>
+    {% if d.activity %}
+    <ul class="activity">
+      {% for a in d.activity %}
+      <li><b>{{ a.log.action_label }}</b> · {{ a.ev.user.full_name }}
+        <div class="muted">{{ a.log.user.full_name if a.log.user else '—' }} · {{ a.log.created_at.strftime('%H:%M %d/%m') }} (UTC)</div></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">Chưa có thao tác nào.</p>{% endif %}
+  </section>
+  {% endif %}
+</div>
+
+{# ---------- Theo Phòng, Ban ---------- #}
+{% if d.team_view and d.dept_rows %}
+<section class="card flush">
+  <h2 class="pad">Tiến độ theo Phòng, Ban</h2>
+  <table>
+    <thead><tr><th>Phòng, Ban</th><th class="num">Cán bộ</th><th>Đã gửi</th><th>Đã duyệt</th><th class="num">Điểm TB</th></tr></thead>
+    <tbody>
+    {% for r in d.dept_rows %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td class="num">{{ r.total }}</td>
+        <td><div class="cell-bar"><div class="track sm"><div class="fill" style="width:{{ r.pct_submitted }}%"></div></div><span>{{ r.submitted }}/{{ r.total }}</span></div></td>
+        <td><div class="cell-bar"><div class="track sm"><div class="fill dark" style="width:{{ r.pct_done }}%"></div></div><span>{{ r.done }}/{{ r.total }}</span></div></td>
+        <td class="num">{{ '%.2f'|format(r.avg) if r.avg is not none else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# ---------- Tiến độ KPI của các cá nhân ---------- #}
+{% if d.team_view %}
+<section class="card flush" id="people">
+  <div class="pad people-head">
+    <h2>Tiến độ KPI của các cá nhân</h2>
+    {% if d.people_depts|length > 1 %}
+    <form method="get" class="filters" action="{{ url_for('index') }}#people">
+      <select name="ban" onchange="this.form.submit()" aria-label="Lọc theo Phòng, Ban">
+        <option value="">Tất cả Phòng, Ban</option>
+        {% for dep in d.people_depts %}<option value="{{ dep.id }}" {% if d.dept_filter == dep.id %}selected{% endif %}>{{ dep.name }}</option>{% endfor %}
+      </select>
+      <noscript><button type="submit" class="small">Lọc</button></noscript>
+    </form>
+    {% endif %}
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Họ và tên</th><th>Phòng, Ban</th><th>Chức vụ</th><th>Mẫu 3</th><th>Mẫu 4 – 5</th><th class="num">Điểm</th><th>Xếp loại</th></tr></thead>
+    <tbody>
+    {% for p in d.people %}
+      <tr>
+        <td>{% if p.link %}<a href="{{ url_for('kpi.view', eid=p.ev.id) }}"><b>{{ p.user.full_name }}</b></a>{% else %}<b>{{ p.user.full_name }}</b>{% endif %}</td>
+        <td>{{ p.user.department.name if p.user.department else '—' }}</td>
+        <td>{{ p.user.role_short }}</td>
+        <td><span class="badge {{ {'approved':'ok','submitted':'warn','ban_approved':'info'}.get(p.plan_code, '') }}">{{ p.plan }}</span></td>
+        <td><span class="badge {{ {'approved':'ok','published':'ok','self_scored':'warn','reviewed':'info'}.get(p.result_code, '') }}">{{ p.result }}</span></td>
+        <td class="num">{{ '%.2f'|format(p.score) if p.score is not none else '—' }}</td>
+        <td>{% if p.rating %}<span title="{{ rating_label(p.rating) }}">{{ p.rating }}</span>{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">Không có cán bộ nào.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
+{% endif %}
+{% endblock %}

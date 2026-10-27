@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Báo cáo {{ forms[form] }}{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+<div class="page-head no-print">
+  <div><h1>Báo cáo tổng hợp</h1>
+    <p class="muted">Theo Hướng dẫn 07-HD/BTCTU. Số liệu trong phạm vi bạn được xem.</p></div>
+  <div class="row">
+    <form method="get" class="filters">
+      <select name="period" onchange="this.form.submit()" aria-label="Kỳ đánh giá">
+        {% for p in periods %}<option value="{{ p.id }}" {% if period and p.id == period.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+      </select>
+    </form>
+    {% if period %}<a class="btn" href="{{ url_for('reports.export', form=form, period=period.id) }}">Xuất Excel {{ forms[form] }}</a>{% endif %}
+    <button type="button" class="secondary" onclick="window.print()">In báo cáo</button>
+  </div>
+</div>
+<nav class="tabs no-print" aria-label="Chọn mẫu báo cáo">
+  {% for key, name in forms.items() %}
+  <a href="{{ url_for('reports.index', form=key, period=period.id if period else None) }}" class="{{ 'active' if key == form }}">{{ name }}</a>
+  {% endfor %}
+</nav>
+
+{% if not period %}
+<div class="card"><p>Chưa có kỳ đánh giá.</p></div>
+{% else %}
+{% set q = period.quarter %}{% set y = period.year %}
+<section class="card report">
+  <div class="doc-head">
+    <div class="org">ĐẢNG ỦY CÁC CƠ QUAN ĐẢNG<br>THÀNH PHỐ CẦN THƠ<br>*</div>
+    <div class="nation"><b><u>ĐẢNG CỘNG SẢN VIỆT NAM</u></b><br><i>Cần Thơ, ngày …… tháng …… năm ……</i></div>
+  </div>
+
+  {% if form == 'm6' %}
+  {# =================== MẪU 6 =================== #}
+  <div class="form-title"><span class="form-no">Mẫu 6</span>
+    <h2>TỔNG HỢP KẾT QUẢ ĐÁNH GIÁ VÀ ĐỀ XUẤT XẾP LOẠI QUÝ {{ ['I','II','III','IV'][q-1] }}, NĂM {{ y }}<br>
+      ĐỐI VỚI CÁN BỘ THUỘC DIỆN BAN THƯỜNG VỤ THÀNH ỦY ĐÁNH GIÁ, XẾP LOẠI CHẤT LƯỢNG</h2></div>
+  <div class="form-table-wrap">
+  <table class="form-table rpt">
+    <thead>
+      <tr><th>STT</th><th>Họ và tên</th><th>Chức vụ, đơn vị công tác</th><th>Cá nhân tự đề xuất mức xếp loại</th>
+        <th>Cấp có thẩm quyền đề xuất mức xếp loại</th>
+        <th class="w-task">Tóm tắt căn cứ, cơ sở lý do trong trường hợp đề xuất mức xếp loại hoàn thành xuất sắc hoặc mức xếp loại không hoàn thành nhiệm vụ hoặc các nội dung khác (nếu có)</th>
+        <th>Đề xuất nội dung liên quan về công tác cán bộ (nếu có)</th></tr>
+      <tr class="colnos">{% for i in range(1, 8) %}<th>({{ i }})</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+    {% for r in data %}
+      <tr><td class="ctr">{{ loop.index }}</td><td><b>{{ r.name }}</b></td><td>{{ r.position }}</td>
+        <td>{{ rating_labels.get(r.self, '') }}</td>
+        <td>{{ rating_labels.get(r.proposed, '') }}{% if r.proposed and not r.final %} <small class="muted no-print">(đề xuất, chưa quyết định)</small>{% endif %}</td>
+        <td class="pre">{{ r.reason }}</td><td class="pre">{{ r.personnel }}</td></tr>
+    {% else %}
+      <tr><td colspan="7" class="muted ctr">Chưa có hồ sơ nào được trình trong {{ period.name }}.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="sign"><div></div><div><b>XÁC NHẬN CỦA TẬP THỂ LÃNH ĐẠO CƠ QUAN, ĐƠN VỊ</b><br><i>(Xác lập thời điểm, ký, ghi rõ họ tên và đóng dấu)</i></div></div>
+
+  {% else %}
+  {# =================== MẪU 7 / MẪU 8 =================== #}
+  {% set n = data.groups|length %}
+  <div class="form-title"><span class="form-no">{{ forms[form] }}</span>
+    <h2>BÁO CÁO KẾT QUẢ ĐÁNH GIÁ CÁN BỘ LÃNH ĐẠO, QUẢN LÝ {{ 'CẤP XÃ VÀ TƯƠNG ĐƯƠNG' if form == 'm7' else 'CẤP THÀNH PHỐ' }}<br>
+      QUÝ {{ ['I','II','III','IV'][q-1] }} NĂM {{ y }}</h2></div>
+  <div class="form-table-wrap">
+  <table class="form-table rpt m78">
+    <thead>
+      <tr><th>STT</th><th class="w-task">Kết quả xếp loại</th><th>Tổng số cán bộ lãnh đạo, quản lý</th>
+        {% for g in data.groups %}<th>{{ g.name }}</th>{% endfor %}
+        <th>Ghi chú (ghi cụ thể đối tượng cán bộ lãnh đạo, quản lý khác)</th></tr>
+      <tr class="colnos"><th>(1)</th><th>(2)</th>
+        <th>(3)={% for g in data.groups %}({{ loop.index + 3 }}){% if not loop.last %}+{% endif %}{% endfor %}</th>
+        {% for g in data.groups %}<th>({{ loop.index + 3 }})</th>{% endfor %}<th>({{ n + 4 }})</th></tr>
+    </thead>
+    <tbody>
+    {% for r in data.rows %}
+      <tr class="{{ 'b' if r.bold }} {{ 'i' if r.italic }}">
+        <td class="ctr">{{ r.no }}</td><td>{{ r.label }}</td>
+        {% if r.ratio %}
+          <td class="num">{{ '%.2f'|format(r.ratio.total) if r.ratio.total is not none else '' }}</td>
+          {% for g in data.groups %}<td class="num">{{ '%.2f'|format(r.ratio.per[g.id]) if r.ratio.per[g.id] is not none else '' }}</td>{% endfor %}
+        {% elif r.cells %}
+          <td class="num">{{ r.cells.total }}</td>
+          {% for g in data.groups %}<td class="num">{{ r.cells.per[g.id] }}</td>{% endfor %}
+        {% else %}
+          <td></td>{% for g in data.groups %}<td></td>{% endfor %}
+        {% endif %}
+        <td></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="note">{{ 'Lưu ý' if form == 'm7' else 'Ghi chú' }}: Theo Điểm 1.5, Khoản 1, Điều 11, Quy định số 89-QĐ/TU: "Số lượng tập thể, cá nhân được xếp loại
+    “Hoàn thành xuất sắc nhiệm vụ” không vượt quá 20% tổng số tập thể, cá nhân được xếp loại “Hoàn thành tốt nhiệm vụ” theo đối tượng
+    có vị trí, vai trò, chức năng, nhiệm vụ tương đồng, do cấp có thẩm quyền xem xét, quyết định". Do đó, cấp có thẩm quyền khi đánh giá,
+    xếp loại sẽ xem xét, quyết định các nhóm đối tượng có vị trí, vai trò, chức năng, nhiệm vụ tương đồng nhưng phải đảm bảo từng nhóm
+    đối tượng có tối thiểu từ 5 cán bộ trở lên.</p>
+  <div class="no-print">
+    <p class="muted">Tính {{ data.considered }} hồ sơ đã được quyết định xếp loại trong {{ period.name }}, theo nhóm đối tượng ghi trong hồ sơ cán bộ (mục «Nhóm đối tượng (Mẫu 7, 8)» ở trang Người dùng).
+      {% if data.missing_group %}<b>{{ data.missing_group }} hồ sơ chưa gán nhóm đối tượng nên chưa được tính.</b>{% endif %}</p>
+    {% for g in data.over_quota %}<div class="flash warning">Nhóm «{{ g.name }}»: số HTXSNV vượt 20% số HTTNV trở lên.</div>{% endfor %}
+  </div>
+  <div class="sign"><div><b>NGƯỜI LẬP BIỂU</b><br><i>(Ký, ghi rõ họ tên, số điện thoại để liên hệ)</i></div>
+    <div><b>XÁC NHẬN CỦA {{ 'BAN THƯỜNG VỤ ĐẢNG ỦY XÃ, PHƯỜNG, ĐẢNG ỦY TRỰC THUỘC THÀNH ỦY' if form == 'm7' else 'TẬP THỂ LÃNH ĐẠO CƠ QUAN, ĐƠN VỊ' }}</b><br><i>(Xác lập thời điểm, ký, ghi rõ họ tên và đóng dấu)</i></div></div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

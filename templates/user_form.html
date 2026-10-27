@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Sửa người dùng' if user else 'Thêm người dùng' }}{% endblock %}
+{% block content %}
+<h1>{{ 'Sửa người dùng' if user else 'Thêm người dùng' }}</h1>
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid">
+    <div>
+      {% if user %}
+        <p class="muted">Tên đăng nhập: <b>{{ user.username }}</b></p>
+      {% else %}
+        <label>Tên đăng nhập <input name="username" value="{{ form.get('username', '') if form else '' }}" required></label>
+        <label>Mật khẩu tạm <input name="password" type="password" required minlength="8" autocomplete="new-password">
+          <small>Người dùng sẽ phải đổi mật khẩu ở lần đăng nhập đầu tiên.</small></label>
+      {% endif %}
+      <label>Họ và tên <input name="full_name" value="{{ form.full_name if form else '' }}" required></label>
+      <label>Email <input name="email" type="email" value="{{ (form.email if form else '') or '' }}"></label>
+      <label>Điện thoại <input name="phone" value="{{ (form.phone if form else '') or '' }}"></label>
+    </div>
+    <div>
+      <label>Vai trò
+        <select name="role" {% if is_self %}disabled{% endif %}>
+          {% for value, label in Role.CHOICES %}
+          <option value="{{ value }}" {% if form and form.role == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        {% if is_self %}<input type="hidden" name="role" value="{{ user.role }}"><small>Không thể tự đổi vai trò của mình.</small>{% endif %}
+      </label>
+      <label>Phòng ban
+        <select name="department_id">
+          <option value="">-- Không gán --</option>
+          {% for d in departments %}
+          <option value="{{ d.id }}" {% if form and (form.department_id|string) == (d.id|string) %}selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Nhóm đối tượng (Mẫu 7, 8)
+        <select name="position_group_id">
+          <option value="">-- Không chọn --</option>
+          {% for g in groups %}
+          <option value="{{ g.id }}" {% if form and (form.position_group_id|string) == (g.id|string) %}selected{% endif %}>{{ g.form }} · {{ g.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Chức vụ Đảng <input name="party_position" value="{{ (form.party_position if form else '') or '' }}"></label>
+      <label>Chức vụ chính quyền <input name="gov_position" value="{{ (form.gov_position if form else '') or '' }}"></label>
+      <label>Chức vụ đoàn thể <input name="org_position" value="{{ (form.org_position if form else '') or '' }}"></label>
+      <label class="inline"><input type="checkbox" name="is_head" {% if form and form.is_head %}checked{% endif %}> Là người đứng đầu cơ quan, đơn vị</label>
+    </div>
+  </div>
+  <div class="row">
+    <button type="submit">Lưu</button>
+    <a class="btn secondary" href="{{ url_for('users.list_users') }}">Hủy</a>
+  </div>
+</form>
+{% endblock %}

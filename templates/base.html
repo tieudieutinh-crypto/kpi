@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}Chấm KPI cán bộ{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=asset_v) }}">
+</head>
+{% set with_sidebar = current_user.is_authenticated and not current_user.must_change_password %}
+<body class="{{ 'has-sidebar' if with_sidebar else 'no-sidebar' }}">
+{% if with_sidebar %}
+  {% set ep = request.endpoint or '' %}
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark">KPI</span>
+      <span><b>Chấm KPI cán bộ</b><small>Đảng ủy các cơ quan Đảng TP. Cần Thơ</small></span>
+    </a>
+    <div class="side-period">{% if current_period %}{{ current_period.name }}{% else %}Chưa có kỳ đánh giá{% endif %}</div>
+    <nav class="side-nav" aria-label="Menu chính">
+      <a href="{{ url_for('index') }}" class="{{ 'active' if ep == 'index' }}"><span class="ico">▦</span>Dashboard</a>
+      {% if can('user.list') %}<a href="{{ url_for('users.list_users') }}" class="{{ 'active' if ep.startswith('users.') }}"><span class="ico">👥</span>Người dùng</a>{% endif %}
+      {% if can('department.manage') %}<a href="{{ url_for('admin.departments') }}" class="{{ 'active' if ep == 'admin.departments' }}"><span class="ico">🏛</span>Phòng, Ban</a>{% endif %}
+      {% if can('indicator.view') %}<a href="{{ url_for('collective.index') }}" class="{{ 'active' if ep.startswith('collective.') }}"><span class="ico">◎</span>KPI tập thể</a>{% endif %}
+      {% if can('kpi.self') %}<a href="{{ url_for('kpi.mine') }}" class="{{ 'active' if ep == 'kpi.mine' or (ep == 'kpi.view' and is_owner) }}"><span class="ico">✎</span>KPI cá nhân</a>{% endif %}
+      {% if can('kpi.review') or can('kpi.approve') %}<a href="{{ url_for('kpi.queue') }}" class="{{ 'active' if ep == 'kpi.queue' or (ep == 'kpi.view' and is_owner is defined and not is_owner) }}"><span class="ico">✓</span>Duyệt KPI
+        {% if pending_review %}<span class="count">{{ pending_review }}</span>{% endif %}</a>{% endif %}
+      {% if can('report.view') %}<a href="{{ url_for('reports.index') }}" class="{{ 'active' if ep.startswith('reports.') }}"><span class="ico">▤</span>Báo cáo</a>{% endif %}
+      {% if can('period.manage') %}<a href="{{ url_for('admin.periods') }}" class="{{ 'active' if ep.startswith('admin.period') }}"><span class="ico">🗓</span>Kỳ đánh giá</a>{% endif %}
+    </nav>
+    <button type="button" class="side-collapse" id="side-collapse" title="Thu gọn menu để mở rộng vùng nội dung">« Thu gọn menu</button>
+    <div class="side-user">
+      <div class="who"><b>{{ current_user.full_name }}</b><small>{{ current_user.role_label }}{% if current_user.department %} · {{ current_user.department.name }}{% endif %}</small></div>
+      <a href="{{ url_for('auth.account') }}" class="{{ 'active' if ep.startswith('auth.') }}">Tài khoản</a>
+      <form method="post" action="{{ url_for('auth.logout') }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="link">Đăng xuất</button>
+      </form>
+    </div>
+  </aside>
+  <header class="mobile-bar">
+    <button type="button" class="menu-btn" aria-controls="sidebar" aria-expanded="false" id="menu-btn" aria-label="Mở menu">☰</button>
+    <a class="brand" href="{{ url_for('index') }}">Chấm KPI cán bộ</a>
+  </header>
+  <div class="scrim" id="scrim" hidden></div>
+{% elif current_user.is_authenticated %}
+  <header class="topbar"><span class="brand">Chấm KPI cán bộ</span><span class="spacer"></span>
+    <form method="post" action="{{ url_for('auth.logout') }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="link">Đăng xuất</button></form></header>
+{% endif %}
+  <main class="{% block main_class %}{% endblock %}">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+{% if with_sidebar %}
+  <script>
+  (() => {
+    const btn = document.getElementById('menu-btn'), side = document.getElementById('sidebar'), scrim = document.getElementById('scrim');
+    const set = open => { document.body.classList.toggle('menu-open', open); btn.setAttribute('aria-expanded', open); scrim.hidden = !open; };
+    const wide = () => window.matchMedia('(min-width: 900px)').matches;
+    const collapse = on => {
+      document.body.classList.toggle('side-collapsed', on);
+      try { localStorage.setItem('kpi-side-collapsed', on ? '1' : '0'); } catch (_) { /* không lưu được thì thôi */ }
+    };
+    try { if (localStorage.getItem('kpi-side-collapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
+    document.getElementById('side-collapse').addEventListener('click', () => collapse(true));
+    btn.addEventListener('click', () => {
+      if (wide() && document.body.classList.contains('side-collapsed')) { collapse(false); return; }
+      set(!document.body.classList.contains('menu-open'));
+    });
+    scrim.addEventListener('click', () => set(false));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') set(false); });
+  })();
+  </script>
+{% endif %}
+  <script src="{{ url_for('static', filename='js/password_toggle.js', v=asset_v) }}"></script>
+  <script>
+  /* Ô nhập văn bản trong bảng tự giãn theo nội dung, không che chữ */
+  (() => {
+    const fit = el => {
+      if (!el.offsetParent) return;                       // ô đang ẩn (bước khác): để khi hiện mới tính
+      el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight + 2, 58) + 'px';
+    };
+    document.addEventListener('input', e => { if (e.target.matches && e.target.matches('textarea.cell-in')) fit(e.target); });
+    const fitAll = () => document.querySelectorAll('textarea.cell-in').forEach(fit);
+    new MutationObserver(() => requestAnimationFrame(fitAll)).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+    window.addEventListener('load', fitAll);
+  })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

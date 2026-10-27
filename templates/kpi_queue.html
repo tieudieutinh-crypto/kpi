@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, rating_label with context %}
+{% block title %}Duyệt KPI{% endblock %}
+{% block content %}
+<h1>Duyệt KPI cá nhân</h1>
+<p class="muted">Gồm Mẫu 3 (danh mục) chờ duyệt và Mẫu 5 (kết quả tự chấm) chờ nhận xét, quyết định xếp loại.</p>
+<form method="get" class="filters">
+  <select name="period">
+    {% for p in periods %}<option value="{{ p.id }}" {% if p.id == period_id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+  </select>
+  <select name="status">
+    <option value="pending" {% if mode == 'pending' %}selected{% endif %}>Chờ tôi xử lý</option>
+    <option value="done" {% if mode == 'done' %}selected{% endif %}>Đã phê duyệt</option>
+  </select>
+  <button type="submit">Lọc</button>
+</form>
+
+<div class="card flush">
+<table>
+  <thead><tr><th>Cán bộ</th><th>Phòng, Ban</th><th>Biểu mẫu</th><th>Việc cần làm</th><th>Tổng điểm</th><th>Tự đề xuất</th><th></th></tr></thead>
+  <tbody>
+  {% for row in rows %}{% set e = row.ev %}
+    <tr>
+      <td><b>{{ e.user.full_name }}</b><br><small class="muted">{{ e.user.role_label }}</small></td>
+      <td>{{ e.user.department.name if e.user.department else '—' }}</td>
+      <td><b>{{ row.form }}</b></td>
+      <td>{{ row.task }}</td>
+      <td>{% if row.form == 'Mẫu 5' %}{{ '%.2f'|format(e.total_score) }}<br><small class="muted">A {{ '%.1f'|format(e.common_score) }} · B {{ '%.1f'|format(e.result_score) }}</small>{% else %}—{% endif %}</td>
+      <td>{{ rating_label(e.self_rating) if e.self_rating and row.form == 'Mẫu 5' else '—' }}</td>
+      <td><a class="btn small" href="{{ url_for('kpi.view', eid=e.id) }}#{{ 'step1' if row.form == 'Mẫu 3' else 'step3' }}">{{ 'Xem' if mode == 'done' else 'Xử lý' }}</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">Không có hồ sơ nào.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

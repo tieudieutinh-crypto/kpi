@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Phòng, Ban{% endblock %}
+{% block content %}
+<h1>Phòng, Ban</h1>
+<p class="muted">Hệ thống mặc định cấp thành phố, không có cấp xã, phường. Mỗi Phòng, Ban gồm mã và tên.</p>
+<div class="grid">
+  <div class="card flush">
+    <table>
+      <thead><tr><th>Mã Phòng, Ban</th><th>Tên Phòng, Ban</th><th class="num">Cán bộ</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody>
+      {% for d in items %}
+        <tr>
+          <td><b>{{ d.code }}</b></td><td>{{ d.name }}</td>
+          <td class="num">{{ counts.get(d.id, 0) }}</td>
+          <td>{% if d.active %}<span class="badge ok">Hoạt động</span>{% else %}<span class="badge bad">Ngừng</span>{% endif %}</td>
+          <td><a class="btn small secondary" href="{{ url_for('admin.departments', edit=d.id) }}">Sửa</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">Chưa có Phòng, Ban. Hãy thêm ở bên cạnh.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form method="post" action="{{ url_for('admin.save_department') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2>{{ 'Sửa Phòng, Ban' if editing else 'Thêm Phòng, Ban' }}</h2>
+    {% if editing %}<input type="hidden" name="id" value="{{ editing.id }}">{% endif %}
+    <label>Mã Phòng, Ban <input name="code" value="{{ editing.code if editing else '' }}" maxlength="50" required placeholder="VD: BTC"></label>
+    <label>Tên Phòng, Ban <input name="name" value="{{ editing.name if editing else '' }}" maxlength="255" required placeholder="VD: Ban Tổ chức"></label>
+    {% if editing %}<label class="inline"><input type="checkbox" name="active" {% if editing.active %}checked{% endif %}> Đang hoạt động</label>{% endif %}
+    <div class="row">
+      <button type="submit">Lưu</button>
+      {% if editing %}<a class="btn secondary" href="{{ url_for('admin.departments') }}">Hủy</a>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

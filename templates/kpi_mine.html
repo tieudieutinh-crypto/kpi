@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, plan_badge, csrf, rating_label with context %}
+{% block title %}KPI cá nhân{% endblock %}
+{% block content %}
+<h1>KPI cá nhân</h1>
+<p class="muted">Mỗi quý một hồ sơ riêng, thực hiện 3 bước: <b>Bước 1 · Mẫu 3</b> lập danh mục sản phẩm, công việc và trình duyệt; <b>Bước 2 · Mẫu 4</b> tự chấm điểm khi Mẫu 3 đã được duyệt; <b>Bước 3 · Mẫu 5</b> tổng hợp, tự đề xuất xếp loại và trình.
+{% if current_user.role == Role.PBT %}Hồ sơ của Phó Bí thư Thường trực chỉ lưu, không trình.{% endif %}</p>
+
+<div class="card flush">
+<table>
+  <thead><tr><th>Kỳ đánh giá</th><th>Hạn Mẫu 3</th><th>Hạn Mẫu 4-5</th><th>Mẫu 3</th><th>Mẫu 4 – 5</th><th>Tổng điểm</th><th>Xếp loại</th><th></th></tr></thead>
+  <tbody>
+  {% for p in periods %}
+    {% set e = evals.get(p.id) %}
+    <tr>
+      <td><b>{{ p.name }}</b> {% if p.status != 'open' %}<span class="badge">Đã đóng</span>{% endif %}</td>
+      <td>{{ p.deadline_m1_m3.strftime('%d/%m/%Y') if p.deadline_m1_m3 else '—' }}</td>
+      <td>{{ p.deadline_m4_m8.strftime('%d/%m/%Y') if p.deadline_m4_m8 else '—' }}</td>
+      <td>{% if e %}{{ plan_badge(e.plan_status, current_user.role != Role.PBT) }}{% else %}<span class="muted">Chưa lập</span>{% endif %}</td>
+      <td>{% if e and e.plan_status == 'approved' %}{{ status_badge(e.status) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if e and e.items %}{{ '%.2f'|format(e.total_score) }}{% else %}—{% endif %}</td>
+      <td>{% if e and e.final_rating %}{{ rating_label(e.final_rating) }}{% else %}—{% endif %}</td>
+      <td class="actions">
+        {% if e %}
+          <a class="btn small secondary" href="{{ url_for('kpi.view', eid=e.id) }}">Mở</a>
+        {% elif p.status == 'open' %}
+          <form method="post" action="{{ url_for('kpi.start', period_id=p.id) }}">{{ csrf() }}<button class="small">Bắt đầu lập</button></form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="muted">Chưa có kỳ đánh giá nào. Hãy nhờ quản trị viên tạo kỳ đánh giá.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

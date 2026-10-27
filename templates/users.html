@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Người dùng{% endblock %}
+{% block content %}
+<div class="row">
+  <h1>Người dùng</h1>
+  <span class="spacer"></span>
+  {% if can('user.manage') %}<a class="btn" href="{{ url_for('users.new_user') }}">+ Thêm người dùng</a>{% endif %}
+</div>
+
+<form method="get" class="filters">
+  <input name="q" value="{{ q }}" placeholder="Tìm theo tên, tên đăng nhập">
+  <select name="role">
+    <option value="">Mọi vai trò</option>
+    {% for value, label in Role.CHOICES %}<option value="{{ value }}" {% if role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="status">
+    <option value="">Mọi trạng thái</option>
+    <option value="pending" {% if status == 'pending' %}selected{% endif %}>Chờ duyệt</option>
+    <option value="active" {% if status == 'active' %}selected{% endif %}>Đang hoạt động</option>
+    <option value="locked" {% if status == 'locked' %}selected{% endif %}>Bị khóa</option>
+  </select>
+  <button type="submit">Lọc</button>
+</form>
+
+<div class="card flush">
+<table>
+  <thead><tr><th class="col-name">Họ và tên</th><th>Tên đăng nhập</th><th>Vai trò</th><th>Phòng, Ban</th><th class="col-status">Trạng thái</th>
+    {% if can('user.manage') %}<th class="col-actions">Thao tác</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for u in page.items %}
+    <tr>
+      <td class="col-name"><b>{{ u.full_name }}</b></td>
+      <td>{{ u.username }}</td>
+      <td>{% if not u.approved %}<b>{{ u.role_label }}</b><br><small class="muted">vai trò tự chọn khi đăng ký, cần kiểm tra trước khi duyệt</small>{% else %}{{ u.role_label }}{% endif %}</td>
+      <td>{{ u.department.name if u.department else '—' }}</td>
+      <td class="col-status">
+        {% if not u.approved %}<span class="badge warn">Chờ duyệt</span>
+        {% elif not u.active %}<span class="badge bad">Bị khóa</span>
+        {% elif u.is_temporarily_locked %}<span class="badge warn">Tạm khóa</span>
+        {% else %}<span class="badge ok">Hoạt động</span>{% endif %}
+      </td>
+      {% if can('user.manage') %}
+      <td class="col-actions"><div class="act-row">
+        {% set tok %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endset %}
+        {% if not u.approved %}
+          <a class="btn small secondary" href="{{ url_for('users.edit_user', uid=u.id) }}">Sửa</a>
+          <form method="post" action="{{ url_for('users.approve', uid=u.id) }}">{{ tok }}<button class="small">Duyệt</button></form>
+          <form method="post" action="{{ url_for('users.reject', uid=u.id) }}" onsubmit='return confirm({{ ("Từ chối và xóa đăng ký của " ~ u.full_name ~ " (" ~ u.username ~ ")?")|tojson }})'>{{ tok }}<button class="small danger">Từ chối</button></form>
+        {% else %}
+          <a class="btn small secondary" href="{{ url_for('users.edit_user', uid=u.id) }}">Sửa</a>
+          {% if u.id != current_user.id %}
+          <form method="post" action="{{ url_for('users.toggle_lock', uid=u.id) }}">{{ tok }}<button class="small secondary">{{ 'Khóa' if u.active else 'Mở khóa' }}</button></form>
+          <form method="post" action="{{ url_for('users.reset_password', uid=u.id) }}" onsubmit='return confirm({{ ("Đặt lại mật khẩu cho " ~ u.full_name ~ " (" ~ u.username ~ ")?")|tojson }})'>{{ tok }}<button class="small secondary">Đặt lại MK</button></form>
+          <form method="post" action="{{ url_for('users.force_logout', uid=u.id) }}">{{ tok }}<button class="small secondary" title="Đăng xuất khỏi mọi thiết bị">Đăng xuất</button></form>
+          <form method="post" action="{{ url_for('users.delete_user', uid=u.id) }}" onsubmit='return confirm({{ ("Xóa vĩnh viễn người dùng " ~ u.full_name ~ " (" ~ u.username ~ ")? Chỉ xóa được tài khoản chưa có dữ liệu đánh giá.")|tojson }})'>{{ tok }}<button class="small danger">Xóa</button></form>
+          {% endif %}
+        {% endif %}
+      </div>      </td>
+      {% endif %}
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">Không có người dùng nào.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if page.pages > 1 %}
+<div class="pager">
+  {% for p in range(1, page.pages + 1) %}
+    <a class="{{ 'current' if p == page.page else '' }}" href="{{ url_for('users.list_users', page=p, q=q, role=role, status=status) }}">{{ p }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

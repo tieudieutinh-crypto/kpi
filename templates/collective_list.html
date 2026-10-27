@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, rating_label with context %}
+{% block title %}KPI tập thể{% endblock %}
+{% block content %}
+<h1>KPI tập thể</h1>
+<p class="muted">Danh mục chỉ tiêu, nhiệm vụ của từng Phòng, Ban (Mẫu 1) và kết quả thực hiện (Mẫu 2).</p>
+<form method="get" class="filters">
+  <select name="period" onchange="this.form.submit()">
+    {% for p in periods %}<option value="{{ p.id }}" {% if p.id == period_id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+  </select>
+  <input type="hidden" name="list" value="1">
+</form>
+
+<div class="card flush">
+<table>
+  <thead><tr><th>Phòng, Ban</th><th>Mẫu 1</th><th>Mẫu 2</th><th>Xếp loại tập thể</th><th></th></tr></thead>
+  <tbody>
+  {% for d in depts %}
+    {% set ce = existing.get(d.id) %}
+    <tr>
+      <td><b>{{ d.name }}</b></td>
+      <td>{% if ce %}{{ status_badge(ce.status, 'collective') }}{% else %}<span class="muted">Chưa lập</span>{% endif %}</td>
+      <td>{% if ce and ce.result_open %}{{ status_badge(ce.result_status, 'collective') }}{% else %}<span class="muted">Chưa mở</span>{% endif %}</td>
+      <td>{{ rating_label(ce.rating) if ce and ce.rating else '—' }}</td>
+      <td><a class="btn small secondary" href="{{ url_for('collective.view', period_id=period_id, dept_id=d.id) }}">Mở</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">Bạn chưa được gán Phòng, Ban nào để xem KPI tập thể.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, plan_badge, csrf, rating_label, history with context %}
+{% block title %}KPI {{ owner.full_name }} - {{ ev.period.name }}{% endblock %}
+
+{% block main_class %}wide{% endblock %}
+{% block content %}
+{% macro decision_fields(rating_name, rating_value) %}
+  <label>Mức xếp loại
+    <select name="{{ rating_name }}" required>
+      <option value="">-- Chọn --</option>
+      {% for value, label in ratings %}<option value="{{ value }}" {% if rating_value == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Mức độ đáp ứng nhiệm vụ trọng tâm, then chốt
+    <select name="response_level">
+      <option value="">-- Chọn --</option>
+      {% for value, label in levels %}<option value="{{ value }}" {% if ev.response_level == value %}selected{% endif %}>{{ value }}. {{ label }}</option>{% endfor %}
+    </select>
+    <small>Bắt buộc nếu hồ sơ có nhiệm vụ thuộc nhóm trọng tâm, then chốt.</small>
+  </label>
+  <label>Điểm chấm của cấp có thẩm quyền (không bắt buộc)
+    <input type="number" name="reviewer_score" min="0" max="100" step="any" value="{{ ev.reviewer_score if ev.reviewer_score is not none else '' }}">
+  </label>
+  <label>Nhận xét, đánh giá <textarea name="reviewer_comment" rows="3">{{ ev.reviewer_comment or '' }}</textarea></label>
+  <label>Tóm tắt căn cứ <small>(bắt buộc khi xếp loại «Hoàn thành xuất sắc» hoặc «Không hoàn thành»)</small>
+    <textarea name="rating_reason" rows="2">{{ ev.rating_reason or '' }}</textarea></label>
+  <label>Đề xuất về công tác cán bộ (nếu có) <textarea name="personnel_proposal" rows="2">{{ ev.personnel_proposal or '' }}</textarea></label>
+  <label class="inline"><input type="checkbox" name="force_majeure" {% if ev.force_majeure %}checked{% endif %}>
+    Có lý do khách quan, bất khả kháng được cấp có thẩm quyền xác nhận</label>
+  <label>Nêu lý do cụ thể <input name="force_majeure_note" value="{{ ev.force_majeure_note or '' }}"></label>
+{% endmacro %}
+
+<div class="page-head">
+  <div>
+    <h1>KPI cá nhân · {{ ev.period.name }}</h1>
+  </div>
+  <div class="row">
+    {% if is_owner %}<a class="btn secondary" href="{{ url_for('kpi.mine') }}">← Danh sách kỳ</a>
+    {% elif can('kpi.review') or can('kpi.approve') %}<a class="btn secondary" href="{{ url_for('kpi.queue') }}">← Hồ sơ cần xử lý</a>{% endif %}
+    <div class="export-menu">
+      <span class="muted">Xuất Excel:</span>
+      <a class="btn small secondary" href="{{ url_for('kpi.export', eid=ev.id, form='m3') }}">Mẫu 3</a>
+      {% if stage == 'result' and not result_hidden %}
+      <a class="btn small secondary" href="{{ url_for('kpi.export', eid=ev.id, form='m4') }}">Mẫu 4</a>
+      <a class="btn small secondary" href="{{ url_for('kpi.export', eid=ev.id, form='m5') }}">Mẫu 5</a>
+      {% endif %}
+    </div>
+    {% if can_copy %}
+    <form method="post" action="{{ url_for('kpi.copy_previous', eid=ev.id) }}">{{ csrf() }}
+      <button class="secondary" type="submit" title="Chép danh mục nhiệm vụ, số lượng, điểm công việc từ quý trước">Sao chép Mẫu 3 quý trước</button></form>
+    {% endif %}
+  </div>
+</div>
+
+{# ---------- Thông tin cá nhân ---------- #}
+<section class="card profile">
+  <dl>
+    <div class="wide"><dt>Họ và tên</dt><dd><b>{{ owner.full_name }}</b></dd></div>
+    <div><dt>Ngày sinh</dt><dd>{{ owner.birth_date.strftime('%d/%m/%Y') if owner.birth_date else '—' }}</dd></div>
+    <div><dt>Chức vụ Đảng</dt><dd>{{ owner.party_position or '—' }}</dd></div>
+    <div><dt>Chức vụ chính quyền</dt><dd>{{ owner.gov_position or owner.role_label }}</dd></div>
+    <div><dt>Chức vụ đoàn thể</dt><dd>{{ owner.org_position or '—' }}</dd></div>
+    <div><dt>Đơn vị công tác</dt><dd>{{ owner.department.name if owner.department else '—' }}</dd></div>
+    <div><dt>Kỳ đánh giá</dt><dd>{{ ev.period.name }}</dd></div>
+  </dl>
+</section>
+
+{# ---------- Thanh bước ---------- #}
+{% set step2_open = stage == 'result' %}
+<nav class="stepper" id="stepper" aria-label="Các bước đánh giá">
+  <a href="#step1" data-step="1" class="step {{ 'done' if ev.plan_status == PlanStatus.APPROVED else 'current' }}">
+    <span class="num">1</span><span><b>Bước 1 · Mẫu 3</b><br> Danh mục sản phẩm, công việc chuẩn và quy đổi<br>{{ plan_badge(ev.plan_status, needs_submission) }}</span></a>
+  <a href="#step2" data-step="2" class="step {{ '' if step2_open else 'locked' }} {{ 'done' if ev.status != EvalStatus.DRAFT else ('current' if step2_open else '') }}">
+    <span class="num">2</span><span><b>Bước 2 · Mẫu 4</b><br> Tự chấm điểm KPI<br>
+      <span class="badge {{ 'info' if step2_open else '' }}">{{ ('Đang thực hiện' if ev.status == EvalStatus.DRAFT else 'Đã trình') if step2_open else 'Mở sau khi Mẫu 3 được duyệt' }}</span></span></a>
+  <a href="#step3" data-step="3" class="step {{ '' if step2_open else 'locked' }} {{ 'done' if ev.status in (EvalStatus.APPROVED, EvalStatus.PUBLISHED) else ('current' if ev.status != EvalStatus.DRAFT else '') }}">
+    <span class="num">3</span><span><b>Bước 3 · Mẫu 5</b><br> Tổng hợp, đánh giá, xếp loại<br>
+      {% if not needs_submission and ev.status == EvalStatus.DRAFT %}<span class="badge">Không cần trình</span>{% else %}{{ status_badge(ev.status) }}{% endif %}</span></a>
+</nav>
+
+{% if ev.period.status != 'open' %}<div class="flash warning">{{ ev.period.name }} đã đóng: hồ sơ ở chế độ chỉ xem.</div>{% endif %}
+{% if ev.plan_return_note and ev.plan_status == PlanStatus.DRAFT %}
+<div class="flash warning"><b>Mẫu 3 được trả lại để chỉnh sửa:</b> {{ ev.plan_return_note }}</div>
+{% endif %}
+{% if ev.return_note and ev.status == EvalStatus.DRAFT %}
+<div class="flash warning"><b>Mẫu 5 được trả lại để chỉnh sửa:</b> {{ ev.return_note }}</div>
+{% endif %}
+<div id="warnings" class="flash warning" hidden></div>
+<div id="save-errors" class="flash error" hidden></div>
+
+<div id="kpi-app" class="{{ '' if editable else 'readonly' }}">
+  {# ================= BƯỚC 1 · MẪU 3 ================= #}
+  <section class="step-panel" id="step1" data-panel="1">
+    <div class="card">
+      <h2>Bước 1 · Mẫu 3: Danh mục sản phẩm, công việc chuẩn và quy đổi</h2>
+      {% if stage == 'plan' and is_owner %}
+        <p class="muted">Lập danh mục theo từng trục, từng nhóm nhiệm vụ (không bắt buộc đủ 6 trục). Điểm công việc: 100 là công việc chuẩn, tối đa 200 tùy độ khó, mới, phức tạp, phạm vi tác động; hệ số quy đổi = điểm / 100.
+        {% if needs_submission %}Lưu rồi trình lãnh đạo Ban duyệt; sau khi trình, Mẫu 3 bị khóa.{% else %}Phó Bí thư Thường trực không cần trình: bấm «Chốt Mẫu 3» để chuyển sang Mẫu 4.{% endif %}
+        {% if ev.period.deadline_m1_m3 %}Hạn: trước ngày <b>{{ ev.period.deadline_m1_m3.strftime('%d/%m/%Y') }}</b>.{% endif %}</p>
+      {% elif stage == 'plan_locked' %}
+        <p class="muted">Mẫu 3 đã trình{% if ev.plan_ban_approved_by %}, lãnh đạo Ban <b>{{ ev.plan_ban_approved_by.full_name }}</b> đã duyệt{% endif %}; đang chờ duyệt nên không chỉnh sửa được.</p>
+      {% elif ev.plan_status == PlanStatus.APPROVED %}
+        <p class="muted">Mẫu 3 đã {{ 'chốt' if not needs_submission else 'được duyệt cuối' }}{% if ev.plan_approved_by and needs_submission %} bởi <b>{{ ev.plan_approved_by.full_name }}</b>{% endif %}. Bảng dưới là bản đã trình, không thay đổi khi điều chỉnh Mẫu 4.</p>
+      {% endif %}
+      <div id="plan-table" class="form-table-wrap"></div>
+    </div>
+
+    {% if plan_act %}
+    <div class="card decision">
+      <h2>Xử lý Mẫu 3 · {{ 'Lãnh đạo Ban duyệt' if plan_act == 'ban' else 'Duyệt cuối' }}</h2>
+      <div class="grid">
+        <form method="post" action="{{ url_for('kpi.plan_approve', eid=ev.id) }}" class="card inner">
+          {{ csrf() }}<h3>{{ 'Duyệt, trình lãnh đạo cơ quan' if plan_act == 'ban' else 'Duyệt cuối Mẫu 3' }}</h3>
+          <p class="muted">{{ 'Sau khi duyệt, Mẫu 3 được chuyển Phó Bí thư Thường trực duyệt cuối.' if plan_act == 'ban' else 'Sau khi duyệt cuối, cán bộ thực hiện tự chấm điểm ở Mẫu 4.' }}</p>
+          <button type="submit">{{ 'Duyệt Mẫu 3' if plan_act == 'ban' else 'Duyệt cuối' }}</button>
+        </form>
+        <form method="post" action="{{ url_for('kpi.plan_return', eid=ev.id) }}" class="card inner" onsubmit="return confirm('Trả lại Mẫu 3 cho cán bộ chỉnh sửa?')">
+          {{ csrf() }}<h3>Trả lại để chỉnh sửa</h3>
+          <label>Lý do <textarea name="note" rows="3" required></textarea></label>
+          <button type="submit" class="danger">Trả lại</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+    {% if can_plan_reopen %}
+    <form method="post" action="{{ url_for('kpi.plan_reopen', eid=ev.id) }}" class="row" onsubmit="return confirm('Mở lại Mẫu 3 để cán bộ điều chỉnh? Mẫu 3 sẽ về trạng thái đang lập.')">
+      {{ csrf() }}<button type="submit" class="secondary">Mở lại Mẫu 3 để điều chỉnh</button>
+      <span class="muted">Chỉ Quản trị hệ thống và Phó Bí thư Thường trực có quyền này.</span></form>
+    {% endif %}
+  </section>
+
+  {# ================= BƯỚC 2 · MẪU 4 ================= #}
+  <section class="step-panel" id="step2" data-panel="2" hidden>
+    <div class="card">
+      <div class="form-title"><span class="form-no">Mẫu 4</span>
+        <h2>NHIỆM VỤ ĐỀ RA KẾ HOẠCH VÀ THỰC TẾ TRIỂN KHAI {{ ev.period.name|upper }}</h2>
+        <p class="muted">Bước 2 · Tự chấm điểm, đánh giá KPI cá nhân</p></div>
+      {% if not step2_open %}
+        <p class="muted">Bước 2 mở sau khi Mẫu 3 được {{ 'chốt' if not needs_submission else 'lãnh đạo cơ quan duyệt cuối' }}.</p>
+      {% elif result_hidden %}
+        <p class="muted">Cán bộ đang tự chấm điểm, chưa trình Mẫu 5. Số liệu hiển thị khi hồ sơ được trình.</p>
+      {% else %}
+        <p class="muted">Nhiệm vụ lấy từ Mẫu 3 (đánh dấu <span class="tag">Mẫu 3</span>) giữ nguyên nội dung; được điều chỉnh hệ số quy đổi (cột 6; công việc chuẩn = 1, tối đa 2) và thêm nhiệm vụ mới tại từng trục, nhóm nhiệm vụ. Cột (17), (18), (19) ghi nhận hệ số vượt, không cộng vào KPI.
+          {% if not owner.has_leadership_kpi %}Công chức không giữ chức vụ lãnh đạo, quản lý: không đánh giá cột (15), (16) lãnh đạo, chỉ đạo, điều hành (KPI = (A + B + C) / 3).{% else %}KPI = (A + B + C + D) / 4.{% endif %}</p>
+        <div id="result-table" class="form-table-wrap"></div>
+      {% endif %}
+    </div>
+  </section>
+
+  {# ================= BƯỚC 3 · MẪU 5 ================= #}
+  <section class="step-panel" id="step3" data-panel="3" hidden>
+    {% if not step2_open %}
+    <div class="card"><p class="muted">Bước 3 mở sau khi Mẫu 3 được duyệt và thực hiện Mẫu 4.</p></div>
+    {% elif result_hidden %}
+    <div class="card"><p class="muted">Cán bộ chưa trình Mẫu 5.</p></div>
+    {% else %}
+    <div class="card m5">
+      <div class="form-title"><span class="form-no">Mẫu 5</span>
+        <h2>BẢN TỰ ĐÁNH GIÁ, XẾP LOẠI CỦA CÁ NHÂN</h2>
+        <p>{{ ev.period.name }}</p></div>
+
+      <h3 class="sec">I. Tự đánh giá kết quả thực hiện nhiệm vụ</h3>
+      <p>Trên cơ sở nhiệm vụ được giao, cá nhân tự đánh giá về kết quả thực hiện nhiệm vụ theo quý như sau:</p>
+
+      <div class="sec-head" id="sec-common"><b>A. NHÓM TIÊU CHÍ CHUNG (30 ĐIỂM)</b> – Các tiêu chí thực hiện theo Quy định số 89-QĐ/TU của Ban Thường vụ Thành ủy
+        <span class="score-pill" id="common-total"></span></div>
+      {% if editable %}<p><button type="button" class="small secondary" id="all-ok">Đánh dấu «Đảm bảo» cho tất cả</button></p>{% endif %}
+      <div id="common-body" class="form-table-wrap"></div>
+
+      <div class="sec-head" id="sec-result"><b>B. KẾT QUẢ THỰC HIỆN NHIỆM VỤ ĐƯỢC GIAO (70 ĐIỂM)</b>
+        <span class="score-pill" id="result-total"></span></div>
+      <div class="row"><span class="meter" id="alloc"></span>
+        <span class="muted">Điểm tối đa của các trục có nhiệm vụ phải có tổng đúng 70 (trục chính, chủ yếu nhiều điểm hơn); không bắt buộc đủ 6 trục. Cột (3), (4) được điền sẵn từ Mẫu 4, có thể sửa.</span></div>
+      <div id="axis-summary" class="form-table-wrap"></div>
+      <p class="muted"><span id="t-common" hidden></span><span id="t-result" hidden></span><span id="t-total" hidden></span></p>
+
+      <h3 class="sec" id="sec-summary">II. Tự đề xuất xếp loại mức chất lượng</h3>
+      <div class="grid">
+        <label>Mức xếp loại
+          <select id="self-rating">
+            <option value="">-- Chọn --</option>
+            {% for value, label in ratings %}<option value="{{ value }}">{{ loop.index }}- {{ label }}</option>{% endfor %}
+          </select>
+          <small>Theo 04 mức: 1- Hoàn thành xuất sắc nhiệm vụ, 2- Hoàn thành tốt nhiệm vụ, 3- Hoàn thành nhiệm vụ và 4- Không hoàn thành nhiệm vụ.</small>
+        </label>
+        <label>Tự nhận xét (không bắt buộc) <textarea id="self-comment" rows="3" maxlength="5000"></textarea></label>
+      </div>
+      {% if not needs_submission %}<p class="muted">Hồ sơ của Phó Bí thư Thường trực chỉ lưu, không trình.</p>{% endif %}
+
+      <h3 class="sec">III. Nhận xét, đánh giá của cấp có thẩm quyền</h3>
+      <ul class="dotted">
+        <li>Chấm điểm: <b>{{ ev.reviewer_score if ev.reviewer_score is not none else '' }}</b></li>
+        <li>Đề xuất xếp loại: <b>{{ rating_label(ev.final_rating or ev.proposed_rating) if (ev.final_rating or ev.proposed_rating) else '' }}</b>
+          {% if ev.final_rating %}<span class="muted">(đã quyết định{% if ev.approved_by %} bởi {{ ev.approved_by.full_name }}{% endif %})</span>{% endif %}</li>
+        <li>Mức độ đáp ứng đối với các mục tiêu, nhiệm vụ then chốt: <b>{% for v, l in levels %}{% if v == ev.response_level %}{{ v }}. {{ l }}{% endif %}{% endfor %}</b></li>
+      </ul>
+    </div>
+
+    {% if ev.proposed_rating or ev.final_rating or ev.reviewer_comment %}
+    <div class="card">
+      <h2>Chi tiết nhận xét của cấp có thẩm quyền</h2>
+      <ul class="plain">
+        {% if ev.reviewed_by %}<li>Nhận xét bởi <b>{{ ev.reviewed_by.full_name }}</b></li>{% endif %}
+        {% if ev.proposed_rating %}<li>Đề xuất xếp loại: <b>{{ rating_label(ev.proposed_rating) }}</b></li>{% endif %}
+        {% if ev.final_rating %}<li>Quyết định xếp loại: <b>{{ rating_label(ev.final_rating) }}</b>
+          {% if ev.approved_by %}(phê duyệt bởi {{ ev.approved_by.full_name }}){% endif %}</li>{% endif %}
+        {% if ev.reviewer_score is not none %}<li>Điểm chấm: <b>{{ ev.reviewer_score }}</b></li>{% endif %}
+        {% if ev.response_level %}<li>Mức độ đáp ứng nhiệm vụ then chốt: mức {{ ev.response_level }}</li>{% endif %}
+        {% if ev.reviewer_comment %}<li>Nhận xét: {{ ev.reviewer_comment }}</li>{% endif %}
+        {% if ev.rating_reason %}<li>Căn cứ: {{ ev.rating_reason }}</li>{% endif %}
+        {% if ev.force_majeure %}<li>Lý do khách quan, bất khả kháng: {{ ev.force_majeure_note }}</li>{% endif %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if can_review or can_approve or can_return or can_reopen %}
+    <div class="card decision">
+      <h2>Xử lý Mẫu 5</h2>
+      {% if prev %}
+      <p class="muted">Quý trước ({{ prev.period.name }}): {{ rating_label(prev.final_rating) if prev.final_rating else 'chưa có xếp loại' }}.
+        {% if prev.final_rating == Rating.KHT %}<b class="bad-text">Lưu ý: nếu quý này tiếp tục «Không hoàn thành nhiệm vụ», theo Hướng dẫn 07 mục IV.3 cần thay thế cán bộ có kết quả KHT từ 02 quý liên tiếp.</b>{% endif %}</p>
+      {% endif %}
+      <div class="grid">
+        {% if can_review %}
+        <form method="post" action="{{ url_for('kpi.review', eid=ev.id) }}" class="card inner">
+          {{ csrf() }}<h3>Lãnh đạo Ban nhận xét, đề xuất xếp loại</h3>
+          {{ decision_fields('proposed_rating', ev.proposed_rating or ev.self_rating) }}
+          <button type="submit">Nhận xét và trình lãnh đạo cơ quan</button>
+        </form>
+        {% endif %}
+        {% if can_approve %}
+        <form method="post" action="{{ url_for('kpi.approve', eid=ev.id) }}" class="card inner">
+          {{ csrf() }}<h3>Lãnh đạo cơ quan quyết định xếp loại</h3>
+          {% if ev.status == EvalStatus.SELF_SCORED %}<p class="muted">Hồ sơ chưa qua bước nhận xét; phê duyệt trực tiếp sẽ đồng thời ghi nhận là đã nhận xét.</p>{% endif %}
+          {{ decision_fields('final_rating', ev.proposed_rating or ev.self_rating) }}
+          <button type="submit">Phê duyệt xếp loại</button>
+        </form>
+        {% endif %}
+        {% if can_return %}
+        <form method="post" action="{{ url_for('kpi.return_back', eid=ev.id) }}" class="card inner"
+              onsubmit="return confirm('Trả hồ sơ về cho cán bộ chỉnh sửa?')">
+          {{ csrf() }}<h3>Trả lại để chỉnh sửa</h3>
+          <label>Lý do <textarea name="note" rows="3" required></textarea></label>
+          <button type="submit" class="danger">Trả lại</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if can_reopen %}
+      <form method="post" action="{{ url_for('kpi.reopen', eid=ev.id) }}" onsubmit="return confirm('Mở lại hồ sơ đã phê duyệt?')">
+        {{ csrf() }}<button type="submit" class="secondary">Mở lại hồ sơ để điều chỉnh quyết định</button></form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if can_withdraw %}
+    <form method="post" action="{{ url_for('kpi.withdraw', eid=ev.id) }}" onsubmit="return confirm('Thu hồi hồ sơ về bản nháp?')">
+      {{ csrf() }}<button type="submit" class="secondary">Thu hồi Mẫu 5 về bản nháp để sửa</button></form>
+    {% endif %}
+    {% endif %}
+  </section>
+</div>
+
+{{ history(logs) }}
+
+{% if editable %}
+{% if stage == 'plan' %}
+  {% if needs_submission %}
+  <form id="submit-form" method="post" action="{{ url_for('kpi.plan_submit', eid=ev.id) }}">{{ csrf() }}</form>
+  {% else %}
+  <form id="submit-form" method="post" action="{{ url_for('kpi.plan_lock', eid=ev.id) }}">{{ csrf() }}</form>
+  {% endif %}
+{% elif needs_submission %}
+  <form id="submit-form" method="post" action="{{ url_for('kpi.submit', eid=ev.id) }}">{{ csrf() }}</form>
+{% endif %}
+<div class="savebar">
+  <span id="bar-total" class="bar-total"></span>
+  <span id="bar-state" class="muted"></span>
+  <span class="spacer"></span>
+  <button type="button" id="btn-save" class="secondary">Lưu nháp</button>
+  {% if stage == 'plan' %}
+    <button type="button" id="btn-submit" data-confirm="{{ 'Trình Mẫu 3 cho lãnh đạo Ban duyệt? Sau khi trình, Mẫu 3 bị khóa (chỉ Quản trị hoặc Phó Bí thư mở lại được).' if needs_submission else 'Chốt Mẫu 3 và chuyển sang Mẫu 4?' }}">{{ 'Trình Mẫu 3' if needs_submission else 'Chốt Mẫu 3' }}</button>
+  {% elif needs_submission %}
+    <button type="button" id="btn-submit" data-confirm="Trình Mẫu 5 (kết quả tự chấm) cho cấp nhận xét, phê duyệt? Sau khi trình bạn không thể sửa (chỉ thu hồi được khi chưa được nhận xét).">Trình Mẫu 5</button>
+  {% else %}
+    <span class="muted">Không cần trình</span>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script id="kpi-data" type="application/json">{{ data|tojson }}</script>
+<script src="{{ url_for('static', filename='js/kpi_personal.js', v=asset_v) }}"></script>
+{% endblock %}

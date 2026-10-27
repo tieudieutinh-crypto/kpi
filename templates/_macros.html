@@ -1,0 +1,34 @@
+{# Các thành phần giao diện dùng chung #}
+{% macro status_badge(status, kind='personal') %}
+  {% set labels = EvalStatus.LABELS if kind == 'personal' else CollectiveStatus.LABELS %}
+  {% set cls = {'draft': '', 'self_scored': 'warn', 'submitted': 'warn', 'reviewed': 'info',
+                'approved': 'ok', 'published': 'ok'}.get(status, '') %}
+  <span class="badge {{ cls }}">{{ labels.get(status, status) }}</span>
+{% endmacro %}
+
+{% macro plan_badge(status, needs_submission=True) %}
+  {% set cls = {'draft': '', 'submitted': 'warn', 'ban_approved': 'info', 'approved': 'ok'}.get(status, '') %}
+  {% if status == 'approved' and not needs_submission %}<span class="badge ok">Đã chốt</span>
+  {% else %}<span class="badge {{ cls }}">{{ PlanStatus.LABELS.get(status, status) }}</span>{% endif %}
+{% endmacro %}
+
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro rating_label(code) -%}
+  {%- for value, label in Rating.CHOICES %}{% if value == code %}{{ label }}{% endif %}{% endfor -%}
+{%- endmacro %}
+
+{% macro history(logs) %}
+<div class="card">
+  <h2>Lịch sử xử lý</h2>
+  {% if logs %}
+  <ul class="timeline">
+    {% for l in logs %}
+    <li><b>{{ l.action_label }}</b> · {{ l.user.full_name if l.user else '—' }}
+      · <span class="muted">{{ l.created_at.strftime('%H:%M %d/%m/%Y') }} (UTC)</span>
+      {% if l.note %}<div class="note">{{ l.note }}</div>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Chưa có thao tác nào.</p>{% endif %}
+</div>
+{% endmacro %}

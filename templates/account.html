@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Tài khoản{% endblock %}
+{% block content %}
+<h1>Tài khoản của tôi</h1>
+<div class="grid">
+  <form method="post" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2>Thông tin cá nhân</h2>
+    <p class="muted">Tên đăng nhập: <b>{{ current_user.username }}</b> · Vai trò: <b>{{ current_user.role_label }}</b>
+      {% if current_user.department %}· Phòng ban: <b>{{ current_user.department.name }}</b>{% endif %}</p>
+    <label>Họ và tên <input name="full_name" value="{{ current_user.full_name }}" required></label>
+    <label>Ngày sinh <input name="birth_date" type="date" value="{{ current_user.birth_date or '' }}"></label>
+    <label>Email <input name="email" type="email" value="{{ current_user.email or '' }}"></label>
+    <label>Điện thoại <input name="phone" value="{{ current_user.phone or '' }}"></label>
+    <label>Chức vụ Đảng <input name="party_position" value="{{ current_user.party_position or '' }}"></label>
+    <label>Chức vụ chính quyền <input name="gov_position" value="{{ current_user.gov_position or '' }}"></label>
+    <label>Chức vụ đoàn thể <input name="org_position" value="{{ current_user.org_position or '' }}"></label>
+    <button type="submit">Lưu thông tin</button>
+  </form>
+
+  <div class="card">
+    <h2>Bảo mật</h2>
+    <p><a href="{{ url_for('auth.change_password') }}">Đổi mật khẩu</a></p>
+    <form method="post" action="{{ url_for('auth.logout_all') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p class="muted">Đăng xuất khỏi tất cả thiết bị khác đang đăng nhập bằng tài khoản này.</p>
+      <button type="submit" class="secondary">Đăng xuất thiết bị khác</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

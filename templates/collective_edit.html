@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, csrf, rating_label, history with context %}
+{% block title %}KPI tập thể {{ dept.name }} - {{ period.name }}{% endblock %}
+
+{% block main_class %}wide{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>KPI tập thể · {{ dept.name }}</h1>
+    <p class="muted">{{ period.name }} · Mã {{ dept.code }}</p>
+  </div>
+  <div class="row">
+    {% if ce %}<div class="export-menu"><span class="muted">Xuất Excel:</span>
+      <a class="btn small secondary" href="{{ url_for('collective.export', period_id=period.id, dept_id=dept.id, form='m1') }}">Mẫu 1</a>
+      {% if ce.result_open %}<a class="btn small secondary" href="{{ url_for('collective.export', period_id=period.id, dept_id=dept.id, form='m2') }}">Mẫu 2</a>{% endif %}
+    </div>{% endif %}
+    <a class="btn secondary" href="{{ url_for('collective.index', period=period.id, list=1) }}">← Danh sách Phòng, Ban</a></div>
+</div>
+
+{% if not ce %}
+  <div class="card"><p>Đơn vị này chưa lập KPI tập thể cho {{ period.name }}.</p></div>
+{% else %}
+{% if period.status != 'open' %}<div class="flash warning">{{ period.name }} đã đóng: chỉ xem.</div>{% endif %}
+{% macro url(name) %}{{ url_for(name, period_id=period.id, dept_id=dept.id) }}{% endmacro %}
+{% if ce.return_note and ce.status == CollectiveStatus.DRAFT %}
+<div class="flash warning"><b>Mẫu 1 được trả lại để chỉnh sửa:</b> {{ ce.return_note }}</div>
+{% endif %}
+{% if ce.result_return_note and ce.result_open and ce.result_status == CollectiveStatus.DRAFT %}
+<div class="flash warning"><b>Mẫu 2 được trả lại để chỉnh sửa:</b> {{ ce.result_return_note }}</div>
+{% endif %}
+<div id="save-errors" class="flash error" hidden></div>
+
+<nav class="stepper two" id="stepper" aria-label="Mẫu KPI tập thể">
+  <a href="#m1" data-step="1" class="step {{ 'done' if ce.status == 'approved' else 'current' }}">
+    <span class="num">1</span><span><b>Mẫu 1</b> · Danh mục chỉ tiêu, nhiệm vụ<br>{{ status_badge(ce.status, 'collective') }}
+      {% if period.deadline_m1_m3 %}<small class="muted">Hạn {{ period.deadline_m1_m3.strftime('%d/%m/%Y') }}</small>{% endif %}</span></a>
+  <a href="#m2" data-step="2" class="step {{ '' if ce.result_open else 'locked' }} {{ 'done' if ce.result_status == 'approved' and ce.result_open else ('current' if ce.result_open else '') }}"
+     {% if not ce.result_open %}aria-disabled="true" title="Mẫu 2 mở sau khi Mẫu 1 được duyệt"{% endif %}>
+    <span class="num">2</span><span><b>Mẫu 2</b> · Kết quả thực hiện<br>
+      {% if ce.result_open %}{{ status_badge(ce.result_status, 'collective') }}{% else %}<span class="badge">Mở sau khi Mẫu 1 được duyệt</span>{% endif %}
+      {% if period.deadline_m2 %}<small class="muted">Hạn {{ period.deadline_m2.strftime('%d/%m/%Y') }}</small>{% endif %}</span></a>
+</nav>
+
+<div id="kpi-app" class="{{ '' if editable else 'readonly' }}">
+  {# ================= MẪU 1 ================= #}
+  <section class="step-panel" data-panel="1">
+    <div class="card">
+      <h2>Mẫu 1 · Danh mục chỉ tiêu, nhiệm vụ của {{ dept.name }}</h2>
+      <p class="muted">Lập ở đầu quý theo từng trục, từng nhóm nhiệm vụ; bấm «+ Thêm nhiệm vụ» tại nhóm cần thêm. Trình Phó Bí thư Thường trực duyệt; sau khi duyệt, các dòng tự chuyển sang Mẫu 2 để nhập kết quả.
+        {% if not can_edit_dept %}Chỉ lãnh đạo đơn vị cấp Thường trực (Phó Trưởng Ban TT, Phó Chánh Văn phòng TT, Phó Chủ nhiệm UBKT TT) được thêm, sửa và trình.{% endif %}</p>
+      <div id="m1-table" class="form-table-wrap"></div>
+    </div>
+    {% if ce.confirmed_by and ce.status == 'approved' %}<p class="muted">Mẫu 1 đã được <b>{{ ce.confirmed_by.full_name }}</b> duyệt.</p>{% endif %}
+    {% if can_approve %}
+    <div class="card decision"><h2>Lãnh đạo cơ quan duyệt Mẫu 1</h2>
+      <div class="grid">
+        <form method="post" action="{{ url('collective.approve') }}" class="card inner">
+          {{ csrf() }}<h3>Duyệt Mẫu 1</h3><p class="muted">Sau khi duyệt, đơn vị nhập kết quả ở Mẫu 2.</p>
+          <button type="submit">Duyệt</button>
+        </form>
+        <form method="post" action="{{ url('collective.return_back') }}" class="card inner" onsubmit="return confirm('Trả lại Mẫu 1 cho đơn vị chỉnh sửa?')">
+          {{ csrf() }}<h3>Trả lại để chỉnh sửa</h3>
+          <label>Lý do <textarea name="note" rows="3" required></textarea></label>
+          <button type="submit" class="danger">Trả lại</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+    <div class="row">
+    {% if can_reopen %}
+    <form method="post" action="{{ url('collective.reopen') }}" onsubmit="return confirm('Mở lại Mẫu 1 để đơn vị điều chỉnh? Mẫu 2 sẽ tạm khóa cho tới khi Mẫu 1 được duyệt lại (kết quả đã nhập được giữ nguyên).')">
+      {{ csrf() }}<button type="submit" class="secondary">Mở lại Mẫu 1 để điều chỉnh</button></form>
+    {% endif %}
+    {% if can_withdraw %}
+    <form method="post" action="{{ url('collective.withdraw') }}" onsubmit="return confirm('Thu hồi Mẫu 1 về bản nháp?')">
+      {{ csrf() }}<button type="submit" class="secondary">Thu hồi Mẫu 1 về bản nháp</button></form>
+    {% endif %}
+    </div>
+  </section>
+
+  {# ================= MẪU 2 ================= #}
+  <section class="step-panel" data-panel="2" hidden>
+    {% if not ce.result_open %}
+    <div class="card"><h2>Mẫu 2 · Kết quả thực hiện nhiệm vụ tập thể</h2>
+      <p class="muted"><b>Mẫu 2 mở sau khi Mẫu 1 được duyệt.</b> Các chỉ tiêu, nhiệm vụ của Mẫu 1 đã duyệt sẽ tự chuyển sang Mẫu 2 để nhập kết quả.</p></div>
+    {% else %}
+    <div class="card m5">
+      <div class="form-title"><span class="form-no">Mẫu 2</span>
+        <h2>KẾT QUẢ THỰC HIỆN NHIỆM VỤ CỦA {{ dept.name|upper }} {{ period.name|upper }}</h2></div>
+      <h3 class="sec">I. KẾT QUẢ THỰC HIỆN NHIỆM VỤ THEO CHỈ TIÊU NGHỊ QUYẾT NĂM</h3>
+      <p class="muted">Các dòng lấy từ Mẫu 1 đã duyệt (chỉ xem); chỉ nhập cột (7) và (11). Cột (8), (9) tự tính.</p>
+      <div id="m2-table" class="form-table-wrap"></div>
+      <h3 class="sec">II. KẾT QUẢ THỰC HIỆN MỘT SỐ NHIỆM VỤ TRỌNG TÂM KHÁC</h3>
+      <label><span class="muted">(Do đơn vị tổng hợp theo tình hình thực hiện nhiệm vụ thực tế)</span>
+        <textarea id="other-key" rows="5" maxlength="10000"></textarea></label>
+      <h3 class="sec">III. MÔ HÌNH HAY, CÁCH LÀM SÁNG TẠO (nếu có)</h3>
+      <textarea id="models" rows="4" maxlength="10000"></textarea>
+    </div>
+    <section class="card no-print">
+      <h2>Tổng hợp tham khảo</h2>
+      <div class="totals">
+        <div><span class="muted">Số chỉ tiêu</span><b id="s-total">—</b></div>
+        <div><span class="muted">Đã có kết quả</span><b id="s-result">—</b></div>
+        <div><span class="muted">Đạt từ 100% chỉ tiêu quý</span><b id="s-achieved">—</b></div>
+        <div><span class="muted">Hoàn thành đúng hạn</span><b id="s-ontime">—</b></div>
+        <div class="big"><span class="muted">Hoàn thành bình quân*</span><b id="s-avg">—</b></div>
+      </div>
+      <p class="muted">* Không thuộc Mẫu 2; bình quân tỷ lệ hoàn thành chỉ tiêu quý (mỗi chỉ tiêu tính tối đa 100%), chỉ để tham khảo.</p>
+    </section>
+    {% if ce.result_confirmed_by and ce.result_status == 'approved' %}
+    <div class="card"><h2>Duyệt Mẫu 2 của lãnh đạo cơ quan</h2>
+      <p>Duyệt bởi <b>{{ ce.result_confirmed_by.full_name }}</b>.{% if ce.rating %} Xếp loại tập thể: <b>{{ rating_label(ce.rating) }}</b>.{% endif %}</p></div>
+    {% endif %}
+    {% if m2_approve %}
+    <div class="card decision"><h2>Lãnh đạo cơ quan duyệt Mẫu 2</h2>
+      <div class="grid">
+        <form method="post" action="{{ url('collective.approve_results') }}" class="card inner">
+          {{ csrf() }}<h3>Duyệt Mẫu 2</h3>
+          <label>Xếp loại tập thể (không bắt buộc)
+            <select name="rating"><option value="">-- Chưa xếp loại --</option>
+              {% for v, l in ratings %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label>
+          <button type="submit">Duyệt</button>
+        </form>
+        <form method="post" action="{{ url('collective.return_results') }}" class="card inner" onsubmit="return confirm('Trả lại Mẫu 2 cho đơn vị chỉnh sửa?')">
+          {{ csrf() }}<h3>Trả lại để chỉnh sửa</h3>
+          <label>Lý do <textarea name="note" rows="3" required></textarea></label>
+          <button type="submit" class="danger">Trả lại</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+    <div class="row">
+    {% if m2_reopen %}
+    <form method="post" action="{{ url('collective.reopen_results') }}" onsubmit="return confirm('Mở lại Mẫu 2 để điều chỉnh?')">
+      {{ csrf() }}<button type="submit" class="secondary">Mở lại Mẫu 2 để điều chỉnh</button></form>
+    {% endif %}
+    {% if m2_withdraw %}
+    <form method="post" action="{{ url('collective.withdraw_results') }}" onsubmit="return confirm('Thu hồi Mẫu 2 về bản nháp?')">
+      {{ csrf() }}<button type="submit" class="secondary">Thu hồi Mẫu 2 về bản nháp</button></form>
+    {% endif %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+{{ history(logs) }}
+
+{% if edit_m1 or edit_m2 %}
+<form id="submit-form" method="post" action="{{ url('collective.submit') if edit_m1 else url('collective.submit_results') }}">{{ csrf() }}</form>
+<div class="savebar">
+  <span class="bar-total">{{ 'Đang lập Mẫu 1' if edit_m1 else 'Đang nhập kết quả Mẫu 2' }}</span>
+  <span id="bar-state" class="muted"></span><span class="spacer"></span>
+  <button type="button" id="btn-save" class="secondary">Lưu nháp</button>
+  <button type="button" id="btn-submit" data-confirm="{{ 'Trình Mẫu 1 cho lãnh đạo cơ quan duyệt? Sau khi trình không thể sửa (chỉ thu hồi được khi chưa duyệt).' if edit_m1 else 'Trình Mẫu 2 (kết quả) cho lãnh đạo cơ quan duyệt?' }}">{{ 'Trình Mẫu 1' if edit_m1 else 'Trình Mẫu 2' }}</button>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if ce %}
+<script id="kpi-data" type="application/json">{{ data|tojson }}</script>
+<script src="{{ url_for('static', filename='js/kpi_collective.js', v=asset_v) }}"></script>
+{% endif %}
+{% endblock %}
